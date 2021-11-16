@@ -1,0 +1,245 @@
+using System;
+
+namespace PayCalculator
+{
+
+    class ExecutePayCalculator
+    {
+        static void Main(string[] args)
+        {
+            decimal grossPay = GetPay(); // Holds input package figure
+            string paycycle = GetPayCycle(); // Holds inputed pay cycle
+            ResultsModel result = new ResultsModel(); // Holds output results for display
+
+            // Do calculations and load results
+            result = Calculate(paycycle, grossPay);
+            // Display results
+            Console.WriteLine();
+            Console.WriteLine("Calculating salary details...");
+            Console.WriteLine();
+            Console.Write("Gross package: $");
+            Console.WriteLine(result.GrossPackage);
+            Console.Write("Superannuation: $");
+            Console.WriteLine(result.Superannuation);
+            Console.WriteLine();
+            Console.Write("Taxable Income: $");
+            Console.WriteLine(result.TaxableIncome);
+            Console.WriteLine();
+            Console.WriteLine("Deductions:");
+            Console.Write("Medicare Levy: $");
+            Console.WriteLine(result.MedicareLevy);
+            Console.Write("Budget Repair Levy: $");
+            Console.WriteLine(result.BudgetRepairLevy);
+            Console.Write("Income Tax: $");
+            Console.WriteLine(result.IncomeTax);
+            Console.WriteLine();
+            Console.Write("Net Income: $");
+            Console.WriteLine(result.NetIncome);
+            Console.Write("Pay packet: $");
+            Console.Write(result.PayPacket);
+            Console.WriteLine(result.PayFrequency);
+            Console.WriteLine();
+            Console.Write("Press any key to end...");
+            Console.ReadLine();
+        }
+
+        // Gets gross package figure from user
+        private static decimal GetPay()
+        {
+            bool havePay = false;
+            string input;
+            decimal pay;
+
+            do
+            {
+                Console.Write("Enter your salary package amount: ");
+                input = Console.ReadLine();
+                havePay = decimal.TryParse(input, out pay);
+                if (!havePay)
+                    Console.WriteLine("We did not find a valid amount for your salary package in whole dollars");
+            }
+
+            while (havePay == false); // If figure was invalid, try again
+            return Math.Truncate(pay); // returns valid pay package figure
+        }
+
+        // Gets pay cycle from user
+        private static string GetPayCycle()
+        {
+            string payFrequency;
+            string input;
+            bool validPayFrequency;
+            do
+            {
+                Console.Write("Enter your pay frequency (W for weekly, F for fortnightly, M for monthly): ");
+                input = Console.ReadLine();
+                payFrequency = input.ToUpper();
+                validPayFrequency = Enum.IsDefined(typeof(PayFrequency), payFrequency);
+                if (!validPayFrequency)
+                    Console.WriteLine("We did not find a valid pay frequency");
+            }
+            while (!validPayFrequency);
+            return payFrequency;
+        }
+
+        // Takes the users pay cycle and gross then returns loaded results model
+        private static ResultsModel Calculate(string payFrequency, decimal grossPay)
+        {
+
+            ResultsModel result = new ResultsModel();
+            string payCycle = payFrequency;
+            decimal superRate = (decimal)(109.5 / 9.5); // calculates the fraction of grossPackage that is superannuation
+
+            result.GrossPackage = grossPay;
+            result.Superannuation = Math.Round(Decimal.Divide(result.GrossPackage, superRate), 2, MidpointRounding.AwayFromZero); // calculate 9.5% superannuation from grossPackage
+            result.TaxableIncome = Math.Round((result.GrossPackage - result.Superannuation), 2, MidpointRounding.AwayFromZero); // calculate taxable income
+            result.MedicareLevy = Math.Ceiling(CalculateMedicareLevy(Math.Truncate(result.TaxableIncome))); // Calculates Medicare levy rounded up to the nearest $
+            result.BudgetRepairLevy = Math.Ceiling(CalculateBudgetRepairLevy(Math.Truncate(result.TaxableIncome))); //Calculate budget repair levy rounded up to the nearest $
+            result.IncomeTax = Math.Ceiling(CalculateIncomeTax(Math.Truncate(result.TaxableIncome))); // Calculate Income Tax rounded up to the nearest $
+            result.NetIncome = result.TaxableIncome - result.IncomeTax - result.BudgetRepairLevy - result.MedicareLevy; // Calculate net income
+
+            // Work out pay frequency and pay packet
+            if (payCycle == "W")
+            {
+                result.PayFrequency = " per week";
+                result.PayPacket = Math.Round(result.NetIncome / 52, 2, MidpointRounding.AwayFromZero);
+            }
+            else if (payCycle == "F")
+            {
+                result.PayFrequency = " per fortnight";
+                result.PayPacket = Math.Round(result.NetIncome / 26, 2, MidpointRounding.AwayFromZero);
+            }
+            else if (payCycle == "M")
+            {
+                result.PayFrequency = " per month";
+                result.PayPacket = Math.Round(result.NetIncome / 12, 2, MidpointRounding.AwayFromZero);
+            }
+
+            return result;
+        }
+
+        // Calculate Medicare levy
+        private static decimal CalculateMedicareLevy(decimal taxableIncome)
+        {
+            decimal levy = 0;
+            decimal ti = taxableIncome;
+            MedicareLevyModel medicareRates = new MedicareLevyModel();
+
+            // Start with the highest bracket and work down
+            if (ti > medicareRates.MedicareBracket2)
+            {
+                levy += (ti - medicareRates.MedicareBracket2) * medicareRates.MedicareRate2 / 100;
+                ti = medicareRates.MedicareBracket2;
+            }
+
+            if (ti > medicareRates.MedicareBracket1)
+            {
+                levy += (ti - medicareRates.MedicareBracket1) * medicareRates.MedicareRate1 / 100;
+            }
+
+            return levy;
+        }
+
+        // Calculate Budget Repair Levy
+        private static decimal CalculateBudgetRepairLevy(decimal taxableIncome)
+        {
+            decimal ti = taxableIncome;
+            decimal levy = 0;
+            BudgetRepairLevyModel budRepLevy = new BudgetRepairLevyModel();
+
+            if (ti > budRepLevy.BudgetRepairLevyBracket1)
+            {
+                levy += (ti - budRepLevy.BudgetRepairLevyBracket1) * budRepLevy.BudgetRepairLevyBracket1 / 100;
+            }
+
+            return levy;
+        }
+
+        // Calculate Income Tax
+        private static decimal CalculateIncomeTax(decimal taxableIncome)
+        {
+            decimal incomeTax = 0;
+            decimal ti = taxableIncome;
+            TaxesModel taxRates = new TaxesModel();
+
+            // Start with the highest bracket and work down
+            if (ti > taxRates.TaxBracket4)
+            {
+                incomeTax += Decimal.Multiply((ti - taxRates.TaxBracket4), (decimal)(taxRates.TaxRate4 / 100));
+                ti = taxRates.TaxBracket4;
+            }
+
+            if (ti > taxRates.TaxBracket3)
+            {
+                incomeTax += Decimal.Multiply((ti - taxRates.TaxBracket3), (decimal)(taxRates.TaxRate3 / 100));
+                ti = taxRates.TaxBracket3;
+            }
+
+            if (ti > taxRates.TaxBracket2)
+            {
+                incomeTax += Decimal.Multiply((ti - taxRates.TaxBracket2), (decimal)(taxRates.TaxRate2 / 100));
+                ti = taxRates.TaxBracket2;
+            }
+
+            if (ti > taxRates.TaxBracket1)
+            {
+                incomeTax += Decimal.Multiply((ti - taxRates.TaxBracket1), (decimal)(taxRates.TaxRate1 / 100));
+            }
+
+            return incomeTax;
+
+        }
+    }
+
+    // Used to check user entered pay frequency is valid
+    enum PayFrequency
+    {
+        W,
+        F,
+        M
+    }
+
+    // holds current tax rates and brackets. This would normally be bound to a data source.
+    class TaxesModel
+    {
+
+        public int TaxBracket1 { get; set; } = 18200;
+        public int TaxBracket2 { get; set; } = 37000;
+        public int TaxBracket3 { get; set; } = 87000;
+        public int TaxBracket4 { get; set; } = 180000;
+        public double TaxRate1 { get; set; } = 19;
+        public double TaxRate2 { get; set; } = 32.5;
+        public double TaxRate3 { get; set; } = 37;
+        public double TaxRate4 { get; set; } = 47;
+    }
+
+    // holds current Medicare levy rates and brackets. This would normally be bound to a data source.
+    class MedicareLevyModel
+    {
+        public int MedicareBracket1 { get; set; } = 21335;
+        public int MedicareBracket2 { get; set; } = 26668;
+        public int MedicareRate1 { get; set; } = 10;
+        public int MedicareRate2 { get; set; } = 2;
+    }
+
+    // holds current Budget Repair levy rates and brackets. This would normally be bound to a data source.
+    class BudgetRepairLevyModel
+    {
+        public int BudgetRepairLevyBracket1 { get; set; } = 180000;
+        public double BudgetRepairLevyRate1 { get; set; } = 2;
+    }
+
+    // Holds the results calculated.
+    class ResultsModel
+    {
+        public decimal GrossPackage { get; set; }
+        public decimal Superannuation { get; set; }
+        public decimal TaxableIncome { get; set; }
+        public decimal MedicareLevy { get; set; }
+        public decimal BudgetRepairLevy { get; set; }
+        public decimal IncomeTax { get; set; }
+        public decimal NetIncome { get; set; }
+        public decimal PayPacket { get; set; }
+        public string PayFrequency { get; set; }
+    }
+}
